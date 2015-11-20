@@ -69,7 +69,7 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 	// Send "speaking" packet over the voice websocket
 	s.VoiceSpeaking()
 
-	// start a 20ms read/encode/send loop that loops until EOF from ffmpeg
+	// start a read/encode/send loop that loops until EOF from ffmpeg
 	ticker := time.NewTicker(time.Millisecond * time.Duration(FrameTime))
 	for {
 		// Add sequence and timestamp to udpPacket
@@ -97,7 +97,7 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 		// copy opus result into udpPacket
 		copy(udpPacket[12:], opus)
 
-		// block here until we're exactly at 20ms
+		// block here until we're exactly at the right time :)
 		<-ticker.C
 
 		// Send rtp audio packet to Discord over UDP
