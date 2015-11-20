@@ -19,17 +19,27 @@ import (
 // PlayAudioFile will play the given filename to the already connected
 // Discord voice server/channel.  voice websocket and udp socket
 // must already be setup before this will work.
+
+// Settings.
+var (
+	FrameRate   int = 48000                            // sample rate of frames
+	FrameTime   int = 60                               // Length of audio frame in ms (20, 40, 60)
+	FrameLength int = ((FrameRate / 1000) * FrameTime) // Length of frame as uint16 array
+	OpusBitrate int = 96000                            // Bitrate to use when encoding
+	OpusMaxSize int = (FrameLength * 2)                // max size opus encoder can return
+)
+
 func PlayAudioFile(s *discordgo.Session, filename string) {
 
 	var sequence uint16 = 0  // used for voice play test
 	var timestamp uint32 = 0 // used for voice play test
 
-	opusEncoder, err := gopus.NewEncoder(48000, 1, gopus.Audio)
+	opusEncoder, err := gopus.NewEncoder(FrameRate, 1, gopus.Audio)
 	if err != nil {
 		fmt.Println("NewEncoder Error:", err)
 		return
 	}
-	opusEncoder.SetBitrate(96000)
+	opusEncoder.SetBitrate(OpusBitrate)
 
 	// Create a shell command "object" to run.
 	run := exec.Command("ffmpeg", "-i", filename, "-f", "s16le", "-ar", "48000", "-ac", "1", "pipe:1")
@@ -47,8 +57,8 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 	}
 
 	// variables used during loop below
-	udpPacket := make([]byte, 4000)
-	audiobuf := make([]int16, 960)
+	udpPacket := make([]byte, OpusMaxSize)
+	audiobuf := make([]int16, FrameLength)
 
 	// build the parts that don't change in the udpPacket.
 	udpPacket[0] = 0x80
@@ -59,7 +69,7 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 	s.VoiceSpeaking()
 
 	// start a 20ms read/encode/send loop that loops until EOF from ffmpeg
-	ticker := time.NewTicker(time.Millisecond * 20)
+	ticker := time.NewTicker(time.Millisecond * time.Duration(FrameTime))
 	for {
 		// Add sequence and timestamp to udpPacket
 		binary.BigEndian.PutUint16(udpPacket[2:], sequence)
@@ -77,7 +87,7 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 		}
 
 		// try encoding ffmpeg frame with Opus
-		opus, err := opusEncoder.Encode(audiobuf, 960, 1920)
+		opus, err := opusEncoder.Encode(audiobuf, FrameLength, OpusMaxSize)
 		if err != nil {
 			fmt.Println("Encoding Error:", err)
 			return
@@ -86,22 +96,22 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 		// copy opus result into udpPacket
 		copy(udpPacket[12:], opus)
 
-		<-ticker.C // block here until we're exactly at 20ms
+		// block here until we're exactly at 20ms
+		<-ticker.C
+
+		// Send rtp audio packet to Discord over UDP
 		s.UDPConn.Write(udpPacket[:(len(opus) + 12)])
 
-		// increment sequence and timestamp
-		// timestamp should be calculated based on something.. :)
 		if (sequence) == 0xFFFF {
 			sequence = 0
 		} else {
-			sequence += 1 // this just increments each loop
+			sequence += 1
 		}
 
-		if (timestamp + 960) >= 0xFFFFFFFF {
+		if (timestamp + uint32(FrameLength)) >= 0xFFFFFFFF {
 			timestamp = 0
 		} else {
-			timestamp += 960 // also just increments each loop
+			timestamp += uint32(FrameLength)
 		}
-
 	}
 }
