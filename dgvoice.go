@@ -1,3 +1,8 @@
+/*******************************************************************************
+ * This is very experimental code and probably a long way from perfect or
+ * ideal.  Please provide feed back on areas that would improve performance
+ *
+ */
 package dgvoice
 
 import (
@@ -11,7 +16,10 @@ import (
 	"github.com/layeh/gopus"
 )
 
-func playAudioFile(s *discordgo.Session, filename string) {
+// PlayAudioFile will play the given filename to the already connected
+// Discord voice server/channel.  voice websocket and udp socket
+// must already be setup before this will work.
+func PlayAudioFile(s *discordgo.Session, filename string) {
 
 	var sequence uint16 = 0  // used for voice play test
 	var timestamp uint32 = 0 // used for voice play test
