@@ -42,7 +42,7 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 	opusEncoder.SetBitrate(OpusBitrate)
 
 	// Create a shell command "object" to run.
-	run := exec.Command("ffmpeg", "-i", filename, "-f", "s16le", "-ar", "48000", "-ac", "1", "pipe:1")
+	run := exec.Command("ffmpeg", "-i", filename, "-f", "s16le", "-ar", FrameRate, "-ac", "1", "pipe:1")
 	stdout, err := run.StdoutPipe()
 	if err != nil {
 		fmt.Println("StdoutPipe Error:", err)
