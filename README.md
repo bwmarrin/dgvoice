@@ -1,4 +1,4 @@
-# dgVoice : Add music playback support to Discordgo.
+# dgVoice: music support for Discordgo.
 
 Include this along with Discordgo to add the ability to play audio files
 to a server/channel.
