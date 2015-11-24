@@ -76,7 +76,7 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 		binary.BigEndian.PutUint16(udpPacket[2:], sequence)
 		binary.BigEndian.PutUint32(udpPacket[4:], timestamp)
 
-		// read 1920 bytes (960 int16) from ffmpeg stdout
+		// read data from ffmpeg stdout
 		err = binary.Read(stdout, binary.LittleEndian, &audiobuf)
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			fmt.Println("Reached EOF.")
