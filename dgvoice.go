@@ -64,10 +64,10 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 	// build the parts that don't change in the udpPacket.
 	udpPacket[0] = 0x80
 	udpPacket[1] = 0x78
-	binary.BigEndian.PutUint32(udpPacket[8:], s.Vop2.SSRC)
+	binary.BigEndian.PutUint32(udpPacket[8:], s.Voice.OP2.SSRC)
 
 	// Send "speaking" packet over the voice websocket
-	s.VoiceSpeaking()
+	s.Voice.Speaking(true)
 
 	// start a read/encode/send loop that loops until EOF from ffmpeg
 	ticker := time.NewTicker(time.Millisecond * time.Duration(FrameTime))
@@ -101,7 +101,7 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 		<-ticker.C
 
 		// Send rtp audio packet to Discord over UDP
-		s.UDPConn.Write(udpPacket[:(len(opus) + 12)])
+		s.Voice.UDPConn.Write(udpPacket[:(len(opus) + 12)])
 
 		if (sequence) == 0xFFFF {
 			sequence = 0
@@ -115,4 +115,5 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 			timestamp += uint32(FrameLength)
 		}
 	}
+	s.Voice.Speaking(false)
 }
