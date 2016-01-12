@@ -81,6 +81,8 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 
 	// Send "speaking" packet over the voice websocket
 	s.Voice.Speaking(true)
+	// Send not "speaking" packet over the websocket when we finish
+	defer s.Voice.Speaking(false)
 
 	// start a read/encode/send loop that loops until EOF from ffmpeg
 	ticker := time.NewTicker(time.Millisecond * time.Duration(FrameTime))
