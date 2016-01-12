@@ -17,11 +17,8 @@ import (
 	"github.com/layeh/gopus"
 )
 
-// PlayAudioFile will play the given filename to the already connected
-// Discord voice server/channel.  voice websocket and udp socket
-// must already be setup before this will work.
-
-// Settings.
+// Settings, these can be modified to alter the playback quality.
+// NOTE: This API is not final and these are likely to change.
 var (
 	FrameRate   int = 48000                            // sample rate of frames
 	FrameTime   int = 60                               // Length of audio frame in ms (20, 40, 60)
@@ -30,6 +27,8 @@ var (
 	OpusMaxSize int = (FrameLength * 2)                // max size opus encoder can return
 )
 
+// Internal global vars.
+// NOTE: This API is not final and these are likely to change.
 var (
 	opusEncoder *gopus.Encoder
 	sequence    uint16
@@ -37,6 +36,7 @@ var (
 	run         *exec.Cmd
 )
 
+// init setups up the package for use :)
 func init() {
 	var err error
 	opusEncoder, err = gopus.NewEncoder(FrameRate, 1, gopus.Audio)
@@ -49,10 +49,16 @@ func init() {
 	timestamp = 0
 }
 
+// KillPlayer forces the player to stop by killing the ffmpeg cmd process
+// this method may be removed later in favor of using chans or bools to
+// request a stop.
 func KillPlayer() {
 	run.Process.Kill()
 }
 
+// PlayAudioFile will play the given filename to the already connected
+// Discord voice server/channel.  voice websocket and udp socket
+// must already be setup before this will work.
 func PlayAudioFile(s *discordgo.Session, filename string) {
 
 	// Create a shell command "object" to run.
@@ -94,7 +100,6 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 		// read data from ffmpeg stdout
 		err = binary.Read(stdout, binary.LittleEndian, &audiobuf)
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			fmt.Println("Reached EOF.")
 			return
 		}
 		if err != nil {
