@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"time"
 
 	"github.com/bwmarrin/dgvoice"
@@ -17,7 +18,7 @@ func main() {
 		Password  = flag.String("p", "", "Discord account password.")
 		GuildID   = flag.String("g", "", "Guild ID")
 		ChannelID = flag.String("c", "", "Channel ID")
-		Filename  = flag.String("f", "", "Filename of file to play.")
+		Folder    = flag.String("f", "", "Folder of files to play.")
 		err       error
 	)
 	flag.Parse()
@@ -39,6 +40,7 @@ func main() {
 
 	// This will block until Voice is ready.  This is not the most ideal
 	// way to check and shouldn't be used outside of this example.
+	// TODO : Improve this :)
 	for {
 		if discord.Voice.Ready {
 			break
@@ -46,10 +48,15 @@ func main() {
 		fmt.Print(".")
 		time.Sleep(1 * time.Second)
 	}
+	fmt.Println("")
 
-	// streams file from ffmpeg then encodes with opus and sends via UDP
-	// to Discord.
-	dgvoice.PlayAudioFile(discord, *Filename)
+	// Start loop and attempt to play all files in the given folder
+	fmt.Println("Reading Folder: %s", *Folder)
+	files, _ := ioutil.ReadDir(*Folder)
+	for _, f := range files {
+		fmt.Println("PlayAudioFile:", f.Name())
+		dgvoice.PlayAudioFile(discord, fmt.Sprintf("%s/%s", *Folder, f.Name()))
+	}
 
 	// Close connections
 	discord.Voice.Close()
