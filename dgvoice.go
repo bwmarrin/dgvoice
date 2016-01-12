@@ -30,20 +30,33 @@ var (
 	OpusMaxSize int = (FrameLength * 2)                // max size opus encoder can return
 )
 
-func PlayAudioFile(s *discordgo.Session, filename string) {
+var (
+	opusEncoder *gopus.Encoder
+	sequence    uint16
+	timestamp   uint32
+	run         *exec.Cmd
+)
 
-	var sequence uint16 = 0  // used for voice play test
-	var timestamp uint32 = 0 // used for voice play test
-
-	opusEncoder, err := gopus.NewEncoder(FrameRate, 1, gopus.Audio)
+func init() {
+	var err error
+	opusEncoder, err = gopus.NewEncoder(FrameRate, 1, gopus.Audio)
 	if err != nil {
 		fmt.Println("NewEncoder Error:", err)
 		return
 	}
 	opusEncoder.SetBitrate(OpusBitrate)
+	sequence = 0
+	timestamp = 0
+}
+
+func KillPlayer() {
+	run.Process.Kill()
+}
+
+func PlayAudioFile(s *discordgo.Session, filename string) {
 
 	// Create a shell command "object" to run.
-	run := exec.Command("ffmpeg", "-i", filename, "-f", "s16le", "-ar", strconv.Itoa(FrameRate), "-ac", "1", "pipe:1")
+	run = exec.Command("ffmpeg", "-i", filename, "-f", "s16le", "-ar", strconv.Itoa(FrameRate), "-ac", "1", "pipe:1")
 	stdout, err := run.StdoutPipe()
 	if err != nil {
 		fmt.Println("StdoutPipe Error:", err)
@@ -68,6 +81,8 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 
 	// Send "speaking" packet over the voice websocket
 	s.Voice.Speaking(true)
+	// Send not "speaking" packet over the websocket when we finish
+	defer s.Voice.Speaking(false)
 
 	// start a read/encode/send loop that loops until EOF from ffmpeg
 	ticker := time.NewTicker(time.Millisecond * time.Duration(FrameTime))
