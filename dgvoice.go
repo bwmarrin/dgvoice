@@ -130,5 +130,4 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 			timestamp += uint32(FrameLength)
 		}
 	}
-	s.Voice.Speaking(false)
 }
