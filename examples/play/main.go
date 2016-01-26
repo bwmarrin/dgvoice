@@ -30,6 +30,13 @@ func main() {
 		return
 	}
 
+	// Open Websocket
+	err = discord.Open()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	// Connect to voice channel.
 	// NOTE: Setting mute to false, deaf to true.
 	err = discord.ChannelVoiceJoin(*GuildID, *ChannelID, false, true)

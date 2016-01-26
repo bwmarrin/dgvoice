@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -64,7 +65,6 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 	opusMaxSize := OpusMaxSize()
 	frameLength := FrameLength()
 	frameRate := FrameRate
-	frameTime := FrameTime
 	channels := Channels
 
 	// Create a shell command "object" to run.
@@ -83,32 +83,26 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 	}
 
 	opusEncoder, err = gopus.NewEncoder(frameRate, channels, gopus.Audio)
+
 	if err != nil {
 		fmt.Println("NewEncoder Error:", err)
 		return
 	}
 
 	// variables used during loop below
-	udpPacket := make([]byte, opusMaxSize)
 	audiobuf := make([]int16, frameLength*channels)
-
-	// build the parts that don't change in the udpPacket.
-	udpPacket[0] = 0x80
-	udpPacket[1] = 0x78
-	binary.BigEndian.PutUint32(udpPacket[8:], s.Voice.OP2.SSRC)
 
 	// Send "speaking" packet over the voice websocket
 	s.Voice.Speaking(true)
 	// Send not "speaking" packet over the websocket when we finish
 	defer s.Voice.Speaking(false)
 
-	// start a read/encode/send loop that loops until EOF from ffmpeg
-	ticker := time.NewTicker(time.Millisecond * time.Duration(frameTime))
-	for {
+	sendOpus := make(chan []byte, 5)
+	go SendVoice(s, sendOpus)
+	// TODO, check chan somehow to make sure it is ready?
+	// can the chan be made inside SendVoice?
 
-		// Add sequence and timestamp to udpPacket
-		binary.BigEndian.PutUint16(udpPacket[2:], sequence)
-		binary.BigEndian.PutUint32(udpPacket[4:], timestamp)
+	for {
 
 		// read data from ffmpeg stdout
 		err = binary.Read(stdout, binary.LittleEndian, &audiobuf)
@@ -127,13 +121,45 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 			return
 		}
 
-		// copy opus result into udpPacket
+		// send encoded opus data to the SendVoice channel
+		sendOpus <- opus
+	}
+}
+
+// SendVoice will listen on the given channel and send any
+// pre-encoded opus audio to Discord.  Supposedly.
+func SendVoice(s *discordgo.Session, buf <-chan []byte) {
+
+	runtime.LockOSThread() // testing impact on quality
+
+	opusMaxSize := OpusMaxSize()
+	frameLength := FrameLength()
+	frameTime := FrameTime
+
+	// variables used during loop below
+	udpPacket := make([]byte, opusMaxSize)
+	opus := make([]byte, 1024)
+
+	// build the parts that don't change in the udpPacket.
+	udpPacket[0] = 0x80
+	udpPacket[1] = 0x78
+	binary.BigEndian.PutUint32(udpPacket[8:], s.Voice.OP2.SSRC)
+
+	// start a send loop that loops until buf chan is closed
+	ticker := time.NewTicker(time.Millisecond * time.Duration(frameTime))
+	for {
+
+		// Add sequence and timestamp to udpPacket
+		binary.BigEndian.PutUint16(udpPacket[2:], sequence)
+		binary.BigEndian.PutUint32(udpPacket[4:], timestamp)
+
+		// Get data from chan and copy it into the udpPacket
+		opus = <-buf
 		copy(udpPacket[12:], opus)
 
 		// block here until we're exactly at the right time :)
+		// Then send rtp audio packet to Discord over UDP
 		<-ticker.C
-
-		// Send rtp audio packet to Discord over UDP
 		s.Voice.UDPConn.Write(udpPacket[:(len(opus) + 12)])
 
 		if (sequence) == 0xFFFF {
@@ -147,5 +173,24 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 		} else {
 			timestamp += uint32(frameLength)
 		}
+	}
+}
+
+// SendVoicePCM will listen on the given channel and send
+// the PCM audio provided.
+func SendVoicePCM(s *discordgo.Session, pcmc chan []int16) {
+
+	var err error
+
+	//	opusMaxSize := OpusMaxSize()
+	//	frameLength := FrameLength()
+	frameRate := FrameRate
+	//	frameTime := FrameTime
+	channels := Channels
+
+	opusEncoder, err = gopus.NewEncoder(frameRate, channels, gopus.Audio)
+	if err != nil {
+		fmt.Println("NewEncoder Error:", err)
+		return
 	}
 }
