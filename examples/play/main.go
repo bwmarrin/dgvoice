@@ -55,6 +55,7 @@ func main() {
 	files, _ := ioutil.ReadDir(*Folder)
 	for _, f := range files {
 		fmt.Println("PlayAudioFile:", f.Name())
+		discord.UpdateStatus(0, f.Name())
 		dgvoice.PlayAudioFile(discord, fmt.Sprintf("%s/%s", *Folder, f.Name()))
 	}
 
