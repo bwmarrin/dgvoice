@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -30,6 +31,9 @@ var (
 
 	// Length of audio frame in ms can be 20, 40, or 60
 	FrameTime int = 60
+
+	send bool
+	mu   sync.Mutex
 )
 
 // Internal global vars.
@@ -66,6 +70,7 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 	frameLength := FrameLength()
 	frameRate := FrameRate
 	channels := Channels
+	frameTime := FrameTime
 
 	// Create a shell command "object" to run.
 	run = exec.Command("ffmpeg", "-i", filename, "-f", "s16le", "-ar", strconv.Itoa(frameRate), "-ac", strconv.Itoa(channels), "pipe:1")
@@ -98,7 +103,8 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 	defer s.Voice.Speaking(false)
 
 	sendOpus := make(chan []byte, 5)
-	go SendVoice(s, sendOpus)
+	defer close(sendOpus)
+	go SendVoice(s, frameTime, opusMaxSize, frameLength, sendOpus)
 	// TODO, check chan somehow to make sure it is ready?
 	// can the chan be made inside SendVoice?
 
@@ -128,17 +134,24 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 
 // SendVoice will listen on the given channel and send any
 // pre-encoded opus audio to Discord.  Supposedly.
-func SendVoice(s *discordgo.Session, buf <-chan []byte) {
+func SendVoice(s *discordgo.Session, frameTime, opusMaxSize, frameLength int, buf <-chan []byte) {
+
+	// Temp hacky shit to make sure this only runs one instance at a time.
+	mu.Lock()
+	if send {
+		mu.Unlock()
+		return
+	}
+	send = true
+	mu.Unlock()
+	defer func() { send = false }()
 
 	runtime.LockOSThread() // testing impact on quality
-
-	opusMaxSize := OpusMaxSize()
-	frameLength := FrameLength()
-	frameTime := FrameTime
 
 	// variables used during loop below
 	udpPacket := make([]byte, opusMaxSize)
 	opus := make([]byte, 1024)
+	var ok bool = true
 
 	// build the parts that don't change in the udpPacket.
 	udpPacket[0] = 0x80
@@ -154,7 +167,14 @@ func SendVoice(s *discordgo.Session, buf <-chan []byte) {
 		binary.BigEndian.PutUint32(udpPacket[4:], timestamp)
 
 		// Get data from chan and copy it into the udpPacket
-		opus = <-buf
+		opus, ok = <-buf
+		if !ok {
+			// if the chan is closed, we exit.
+			fmt.Println("chan closed, closing SendVoice")
+			return
+		}
+		// TODO: Is there a better way to avoid all this
+		// data coping?
 		copy(udpPacket[12:], opus)
 
 		// block here until we're exactly at the right time :)
