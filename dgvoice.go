@@ -236,11 +236,13 @@ func Send(v *discordgo.Voice, opus <-chan []byte, rate, size int) {
 		// TODO: Is there a better way to avoid all this
 		// data coping?
 		copy(udpPacket[12:], audiobuf)
+		audiobuf = udpPacket[:12+(len(audiobuf))]
 
 		// block here until we're exactly at the right time :)
 		// Then send rtp audio packet to Discord over UDP
 		<-ticker.C
-		v.UDPConn.Write(udpPacket[:12+(len(audiobuf))])
+		v.UDPConn.Write(audiobuf)
+		//v.UDPConn.Write(udpPacket[:12+(len(audiobuf))])
 
 		if (sequence) == 0xFFFF {
 			sequence = 0
