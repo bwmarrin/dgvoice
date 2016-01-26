@@ -24,7 +24,7 @@ import (
 // currently running process.
 var (
 	// 1 for mono, 2 for stereo
-	Channels int = 1
+	Channels int = 2
 
 	// sample rate of frames, need to test valid options
 	FrameRate int = 48000
@@ -32,8 +32,9 @@ var (
 	// Length of audio frame in ms can be 20, 40, or 60
 	FrameTime int = 20
 
-	send bool
-	mu   sync.Mutex
+	send    bool
+	sendpcm bool
+	mu      sync.Mutex
 )
 
 // Internal global vars.
@@ -66,11 +67,9 @@ func KillPlayer() {
 // must already be setup before this will work.
 func PlayAudioFile(s *discordgo.Session, filename string) {
 
-	opusMaxSize := OpusMaxSize()
 	frameLength := FrameLength()
 	frameRate := FrameRate
 	channels := Channels
-	frameTime := FrameTime
 
 	// Create a shell command "object" to run.
 	run = exec.Command("ffmpeg", "-i", filename, "-f", "s16le", "-ar", strconv.Itoa(frameRate), "-ac", strconv.Itoa(channels), "pipe:1")
@@ -87,13 +86,6 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 		return
 	}
 
-	opusEncoder, err = gopus.NewEncoder(frameRate, channels, gopus.Audio)
-
-	if err != nil {
-		fmt.Println("NewEncoder Error:", err)
-		return
-	}
-
 	// variables used during loop below
 	audiobuf := make([]int16, frameLength*channels)
 
@@ -102,14 +94,12 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 	// Send not "speaking" packet over the websocket when we finish
 	defer s.Voice.Speaking(false)
 
-	sendOpus := make(chan []byte, 5)
-	defer close(sendOpus)
-	fmt.Printf("Starting SendVoice..")
-	go SendVoice(s, frameTime, opusMaxSize, frameLength, sendOpus)
+	sendPCM := make(chan []int16, 2)
+	defer close(sendPCM)
+	go SendPCM(s, sendPCM)
 	// TODO, check chan somehow to make sure it is ready?
-	// can the chan be made inside SendVoice?
+	// can the chan be made inside Send?
 
-	fmt.Printf("Starting encode loop..")
 	for {
 
 		// read data from ffmpeg stdout
@@ -122,30 +112,85 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 			return
 		}
 
-		// try encoding ffmpeg frame with Opus
+		// Send received PCM to the sendPCM channel
+		sendPCM <- audiobuf
+	}
+}
+
+// SendPCM will listen on the given channel and send any
+// PCM audio to Discord.  Supposedly.
+func SendPCM(s *discordgo.Session, pcm <-chan []int16) {
+
+	// Temp hacky stuff to make sure this only runs one instance at a time.
+	mu.Lock()
+	if sendpcm {
+		// some seriously hacky stuff here
+		time.Sleep(1 * time.Second)
+		if sendpcm {
+			mu.Unlock()
+			return
+		}
+	}
+	sendpcm = true
+	mu.Unlock()
+
+	defer func() {
+		sendpcm = false
+	}()
+
+	opusMaxSize := OpusMaxSize()
+	frameLength := FrameLength()
+	frameRate := FrameRate
+	channels := Channels
+	frameTime := FrameTime
+
+	var err error
+	var ok bool
+
+	opusEncoder, err = gopus.NewEncoder(frameRate, channels, gopus.Audio)
+
+	if err != nil {
+		fmt.Println("NewEncoder Error:", err)
+		return
+	}
+
+	sendOpus := make(chan []byte, 2)
+	defer close(sendOpus)
+	go Send(s, frameTime, opusMaxSize, frameLength, sendOpus)
+	// TODO, check chan somehow to make sure it is ready?
+	// can the chan be made inside Send?
+
+	audiobuf := make([]int16, frameLength*channels)
+	for {
+
+		// read pcm from chan
+		audiobuf, ok = <-pcm
+		if !ok {
+			return
+		}
+
+		// try encoding pcm frame with Opus
 		opus, err := opusEncoder.Encode(audiobuf, frameLength, opusMaxSize)
 		if err != nil {
 			fmt.Println("Encoding Error:", err)
 			return
 		}
 
-		// send encoded opus data to the SendVoice channel
+		// send encoded opus data to the sendOpus channel
 		sendOpus <- opus
 	}
-	fmt.Println("Exiting PlayAudioFile")
 }
 
-// SendVoice will listen on the given channel and send any
+// Send will listen on the given channel and send any
 // pre-encoded opus audio to Discord.  Supposedly.
-func SendVoice(s *discordgo.Session, frameTime, opusMaxSize, frameLength int, buf <-chan []byte) {
+func Send(s *discordgo.Session, frameTime, opusMaxSize, frameLength int, buf <-chan []byte) {
 
-	// Temp hacky shit to make sure this only runs one instance at a time.
+	// Temp hacky stuff to make sure this only runs one instance at a time.
 	mu.Lock()
 	if send {
-		// some seriously hacky shit here
+		// some seriously hacky stuff here
 		time.Sleep(1 * time.Second)
 		if send {
-			fmt.Println("send=true, exiting SendVoice")
 			mu.Unlock()
 			return
 		}
@@ -153,10 +198,7 @@ func SendVoice(s *discordgo.Session, frameTime, opusMaxSize, frameLength int, bu
 	send = true
 	mu.Unlock()
 
-	fmt.Println("SendVoice starting, set send=true.. ")
-
 	defer func() {
-		fmt.Println("defer fired, sedding send=false")
 		send = false
 	}()
 
@@ -183,8 +225,6 @@ func SendVoice(s *discordgo.Session, frameTime, opusMaxSize, frameLength int, bu
 		// Get data from chan and copy it into the udpPacket
 		opus, ok = <-buf
 		if !ok {
-			// if the chan is closed, we exit.
-			fmt.Println("chan closed, closing SendVoice")
 			return
 		}
 		// TODO: Is there a better way to avoid all this
@@ -194,7 +234,7 @@ func SendVoice(s *discordgo.Session, frameTime, opusMaxSize, frameLength int, bu
 		// block here until we're exactly at the right time :)
 		// Then send rtp audio packet to Discord over UDP
 		<-ticker.C
-		s.Voice.UDPConn.Write(udpPacket[:(len(opus) + 12)])
+		s.Voice.UDPConn.Write(udpPacket[:12+(len(opus))])
 
 		if (sequence) == 0xFFFF {
 			sequence = 0
@@ -207,24 +247,5 @@ func SendVoice(s *discordgo.Session, frameTime, opusMaxSize, frameLength int, bu
 		} else {
 			timestamp += uint32(frameLength)
 		}
-	}
-}
-
-// SendVoicePCM will listen on the given channel and send
-// the PCM audio provided.
-func SendVoicePCM(s *discordgo.Session, pcmc chan []int16) {
-
-	var err error
-
-	//	opusMaxSize := OpusMaxSize()
-	//	frameLength := FrameLength()
-	frameRate := FrameRate
-	//	frameTime := FrameTime
-	channels := Channels
-
-	opusEncoder, err = gopus.NewEncoder(frameRate, channels, gopus.Audio)
-	if err != nil {
-		fmt.Println("NewEncoder Error:", err)
-		return
 	}
 }
