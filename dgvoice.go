@@ -212,7 +212,7 @@ func Send(v *discordgo.Voice, opus <-chan []byte, rate, size int) {
 	// This allocates the largest possible value
 	// based on frame size w/ 2 channel audio
 	udpPacket := make([]byte, (size*2)*2)
-	audiobuf := make([]byte, (size*2)*2)
+	var audiobuf []byte // := make([]byte, (size*2)*2)
 	var ok bool = true
 
 	// build the parts that don't change in the udpPacket.
@@ -236,9 +236,6 @@ func Send(v *discordgo.Voice, opus <-chan []byte, rate, size int) {
 		// TODO: Is there a better way to avoid all this
 		// data coping?
 		copy(udpPacket[12:], audiobuf)
-
-		// quick test..
-		fmt.Printf("%d:%d\n", len(audiobuf)+12, len(udpPacket))
 
 		// block here until we're exactly at the right time :)
 		// Then send rtp audio packet to Discord over UDP
