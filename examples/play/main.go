@@ -57,7 +57,6 @@ func main() {
 	}
 	fmt.Println("")
 
-	dgvoice.Channels = 1
 	// Start loop and attempt to play all files in the given folder
 	fmt.Println("Reading Folder: %s", *Folder)
 	files, _ := ioutil.ReadDir(*Folder)

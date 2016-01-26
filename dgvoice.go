@@ -24,13 +24,13 @@ import (
 // currently running process.
 var (
 	// 1 for mono, 2 for stereo
-	Channels int = 2
+	Channels int = 1
 
 	// sample rate of frames, need to test valid options
 	FrameRate int = 48000
 
 	// Length of audio frame in ms can be 20, 40, or 60
-	FrameTime int = 60
+	FrameTime int = 20
 
 	send bool
 	mu   sync.Mutex
@@ -104,10 +104,12 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 
 	sendOpus := make(chan []byte, 5)
 	defer close(sendOpus)
+	fmt.Printf("Starting SendVoice..")
 	go SendVoice(s, frameTime, opusMaxSize, frameLength, sendOpus)
 	// TODO, check chan somehow to make sure it is ready?
 	// can the chan be made inside SendVoice?
 
+	fmt.Printf("Starting encode loop..")
 	for {
 
 		// read data from ffmpeg stdout
@@ -130,6 +132,7 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 		// send encoded opus data to the SendVoice channel
 		sendOpus <- opus
 	}
+	fmt.Println("Exiting PlayAudioFile")
 }
 
 // SendVoice will listen on the given channel and send any
@@ -139,12 +142,23 @@ func SendVoice(s *discordgo.Session, frameTime, opusMaxSize, frameLength int, bu
 	// Temp hacky shit to make sure this only runs one instance at a time.
 	mu.Lock()
 	if send {
-		mu.Unlock()
-		return
+		// some seriously hacky shit here
+		time.Sleep(1 * time.Second)
+		if send {
+			fmt.Println("send=true, exiting SendVoice")
+			mu.Unlock()
+			return
+		}
 	}
 	send = true
 	mu.Unlock()
-	defer func() { send = false }()
+
+	fmt.Println("SendVoice starting, set send=true.. ")
+
+	defer func() {
+		fmt.Println("defer fired, sedding send=false")
+		send = false
+	}()
 
 	runtime.LockOSThread() // testing impact on quality
 
