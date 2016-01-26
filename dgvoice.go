@@ -142,7 +142,6 @@ func SendPCM(s *discordgo.Session, pcm <-chan []int16) {
 	frameLength := FrameLength()
 	frameRate := FrameRate
 	channels := Channels
-	frameTime := FrameTime
 
 	var err error
 	var ok bool
@@ -156,7 +155,7 @@ func SendPCM(s *discordgo.Session, pcm <-chan []int16) {
 
 	sendOpus := make(chan []byte, 2)
 	defer close(sendOpus)
-	go Send(s, frameTime, opusMaxSize, frameLength, sendOpus)
+	go Send(s.Voice, sendOpus, frameRate, frameLength)
 	// TODO, check chan somehow to make sure it is ready?
 	// can the chan be made inside Send?
 
@@ -183,7 +182,11 @@ func SendPCM(s *discordgo.Session, pcm <-chan []int16) {
 
 // Send will listen on the given channel and send any
 // pre-encoded opus audio to Discord.  Supposedly.
-func Send(s *discordgo.Session, frameTime, opusMaxSize, frameLength int, buf <-chan []byte) {
+//   rate    : frame sampling rate (eg. 48000)
+//  length   : length (duration) of frame in ms.
+//  channels : number of channels of frame, 1 or 2.
+//func Send(v *discordgo.Voice, opus <-chan []byte, rate, length, channels int) {
+func Send(v *discordgo.Voice, opus <-chan []byte, rate, size int) {
 
 	// Temp hacky stuff to make sure this only runs one instance at a time.
 	mu.Lock()
@@ -205,17 +208,20 @@ func Send(s *discordgo.Session, frameTime, opusMaxSize, frameLength int, buf <-c
 	runtime.LockOSThread() // testing impact on quality
 
 	// variables used during loop below
-	udpPacket := make([]byte, opusMaxSize)
-	opus := make([]byte, 1024)
+	// below size calculation needs evaluated.
+	// This allocates the largest possible value
+	// based on frame size w/ 2 channel audio
+	udpPacket := make([]byte, (size*2)*2)
+	audiobuf := make([]byte, (size*2)*2)
 	var ok bool = true
 
 	// build the parts that don't change in the udpPacket.
 	udpPacket[0] = 0x80
 	udpPacket[1] = 0x78
-	binary.BigEndian.PutUint32(udpPacket[8:], s.Voice.OP2.SSRC)
+	binary.BigEndian.PutUint32(udpPacket[8:], v.OP2.SSRC)
 
 	// start a send loop that loops until buf chan is closed
-	ticker := time.NewTicker(time.Millisecond * time.Duration(frameTime))
+	ticker := time.NewTicker(time.Millisecond * time.Duration(size/(rate/1000)))
 	for {
 
 		// Add sequence and timestamp to udpPacket
@@ -223,18 +229,21 @@ func Send(s *discordgo.Session, frameTime, opusMaxSize, frameLength int, buf <-c
 		binary.BigEndian.PutUint32(udpPacket[4:], timestamp)
 
 		// Get data from chan and copy it into the udpPacket
-		opus, ok = <-buf
+		audiobuf, ok = <-opus
 		if !ok {
 			return
 		}
 		// TODO: Is there a better way to avoid all this
 		// data coping?
-		copy(udpPacket[12:], opus)
+		copy(udpPacket[12:], audiobuf)
+
+		// quick test..
+		fmt.Printf("%d:%d\n", len(audiobuf)+12, len(udpPacket))
 
 		// block here until we're exactly at the right time :)
 		// Then send rtp audio packet to Discord over UDP
 		<-ticker.C
-		s.Voice.UDPConn.Write(udpPacket[:12+(len(opus))])
+		v.UDPConn.Write(udpPacket[:12+(len(audiobuf))])
 
 		if (sequence) == 0xFFFF {
 			sequence = 0
@@ -242,10 +251,10 @@ func Send(s *discordgo.Session, frameTime, opusMaxSize, frameLength int, buf <-c
 			sequence += 1
 		}
 
-		if (timestamp + uint32(frameLength)) >= 0xFFFFFFFF {
+		if (timestamp + uint32(size)) >= 0xFFFFFFFF {
 			timestamp = 0
 		} else {
-			timestamp += uint32(frameLength)
+			timestamp += uint32(size)
 		}
 	}
 }
