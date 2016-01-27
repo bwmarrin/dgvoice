@@ -73,6 +73,7 @@ func SendPCM(v *discordgo.Voice, pcm <-chan []int16) {
 		// read pcm from chan, exit if channel is closed.
 		recvbuf, ok := <-pcm
 		if !ok {
+			fmt.Println("PCM Channel closed.")
 			return
 		}
 
@@ -83,6 +84,10 @@ func SendPCM(v *discordgo.Voice, pcm <-chan []int16) {
 			return
 		}
 
+		if v.Ready == false || v.Opus == nil {
+			fmt.Printf("Discordgo not ready for opus packets. %+v : %+v", v.Ready, v.Opus)
+			return
+		}
 		// send encoded opus data to the sendOpus channel
 		v.Opus <- opus
 	}
@@ -125,7 +130,6 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 		// read data from ffmpeg stdout
 		err = binary.Read(stdout, binary.LittleEndian, &audiobuf)
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			fmt.Println("Reached EOF")
 			return
 		}
 		if err != nil {
