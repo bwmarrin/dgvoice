@@ -3,6 +3,9 @@
  * ideal.  Please provide feed back on areas that would improve performance
  *
  */
+
+// package dgvoice provides opus encoding and audio file playback for the
+// Discordgo package.
 package dgvoice
 
 import (
@@ -19,10 +22,13 @@ import (
 
 // NOTE: This API is not final and these are likely to change.
 
+// Technically the below settings can be adjusted however that poses
+// a lot of other problems that are not handled well at this time.
+// These below values seem to provide the best overall performance
 const (
 	channels  int = 2                   // 1 for mono, 2 for stereo
 	frameRate int = 48000               // audio sampling rate
-	frameSize int = 960                 // size of (uint16) each audio frame
+	frameSize int = 960                 // uint16 size of each audio frame
 	maxBytes  int = (frameSize * 2) * 2 // max size of opus data
 )
 
@@ -39,10 +45,10 @@ func init() {
 }
 
 // SendPCM will listen on the given channel and send any
-// PCM audio to Discord.  Supposedly.
+// PCM audio to Discord.  Supposedly :)
 func SendPCM(v *discordgo.Voice, pcm <-chan []int16) {
 
-	// Temp hacky stuff to make sure this only runs one instance at a time.
+	// make sure this only runs one instance at a time.
 	mu.Lock()
 	if sendpcm || pcm == nil {
 		mu.Unlock()
@@ -51,9 +57,7 @@ func SendPCM(v *discordgo.Voice, pcm <-chan []int16) {
 	sendpcm = true
 	mu.Unlock()
 
-	defer func() {
-		sendpcm = false
-	}()
+	defer func() { sendpcm = false }()
 
 	var err error
 
@@ -109,6 +113,7 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 
 	// Send "speaking" packet over the voice websocket
 	s.Voice.Speaking(true)
+
 	// Send not "speaking" packet over the websocket when we finish
 	defer s.Voice.Speaking(false)
 
@@ -120,10 +125,11 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 		// read data from ffmpeg stdout
 		err = binary.Read(stdout, binary.LittleEndian, &audiobuf)
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			fmt.Println("Reached EOF")
 			return
 		}
 		if err != nil {
-			fmt.Println("Playback Error:", err)
+			fmt.Println("error reading from ffmpeg stdout :", err)
 			return
 		}
 

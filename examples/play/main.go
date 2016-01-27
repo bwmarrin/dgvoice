@@ -52,7 +52,7 @@ func main() {
 	}
 
 	// Start loop and attempt to play all files in the given folder
-	fmt.Println("Reading Folder: %s", *Folder)
+	fmt.Println("Reading Folder: ", *Folder)
 	files, _ := ioutil.ReadDir(*Folder)
 	for _, f := range files {
 		fmt.Println("PlayAudioFile:", f.Name())
