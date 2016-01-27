@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"time"
+	"runtime"
 
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
@@ -45,17 +45,11 @@ func main() {
 		return
 	}
 
-	// This will block until Voice is ready.  This is not the most ideal
-	// way to check and a better solution will be developed.
-	// TODO : Improve this :)
-	for {
-		if discord.Voice.Ready {
-			break
-		}
-		fmt.Print(".")
-		time.Sleep(10 * time.Millisecond)
+	// Hacky loop to prevent sending on a nil channel.
+	// TODO: Find a better way.
+	for discord.Voice.Ready == false {
+		runtime.Gosched()
 	}
-	fmt.Println("")
 
 	// Start loop and attempt to play all files in the given folder
 	fmt.Println("Reading Folder: %s", *Folder)
