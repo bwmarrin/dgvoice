@@ -46,14 +46,14 @@ func main() {
 	}
 
 	// This will block until Voice is ready.  This is not the most ideal
-	// way to check and shouldn't be used outside of this example.
+	// way to check and a better solution will be developed.
 	// TODO : Improve this :)
 	for {
 		if discord.Voice.Ready {
 			break
 		}
 		fmt.Print(".")
-		time.Sleep(1 * time.Second)
+		time.Sleep(10 * time.Millisecond)
 	}
 	fmt.Println("")
 
