@@ -4,7 +4,7 @@ This package adds opus audio and play file support for Discordgo.
 Include this along with Discordgo to add the ability to play audio files
 to a voice channel on Discord.
 
-* You must use Discordgo 0.10.0-alpha or newer
+* You must use Discordgo v0.10.0 or newer
 * You must have ffmpeg in your path and Opus libs already installed.
 
 This has been updated recently and should be more stable however it should still
