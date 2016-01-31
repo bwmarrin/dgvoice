@@ -4,6 +4,11 @@
  *
  */
 
+// **********************************************************************
+// NOTE :: This is getting closer to a Opus<->PCM layer for Discordgo and will
+// probably eventually move into a sub-folder of the Discordgo package.
+// **********************************************************************
+
 // package dgvoice provides opus encoding and audio file playback for the
 // Discordgo package.
 package dgvoice
@@ -33,19 +38,19 @@ const (
 )
 
 var (
+	speakers    map[uint32]*gopus.Decoder
 	opusEncoder *gopus.Encoder
 	run         *exec.Cmd
 	sendpcm     bool
+	recvpcm     bool
+	recv        chan *discordgo.Packet
+	send        chan []int16
+	receiving   bool
 	mu          sync.Mutex
-	PCM         chan []int16
 )
 
-func init() {
-	PCM = make(chan []int16, 2)
-}
-
-// SendPCM will listen on the given channel and send any
-// PCM audio to Discord.  Supposedly :)
+// SendPCM will receive on the provied channel encode
+// received PCM data into Opus then send that to Discordgo
 func SendPCM(v *discordgo.Voice, pcm <-chan []int16) {
 
 	// make sure this only runs one instance at a time.
@@ -71,25 +76,76 @@ func SendPCM(v *discordgo.Voice, pcm <-chan []int16) {
 	for {
 
 		// read pcm from chan, exit if channel is closed.
-		recvbuf, ok := <-pcm
+		recv, ok := <-pcm
 		if !ok {
 			fmt.Println("PCM Channel closed.")
 			return
 		}
 
 		// try encoding pcm frame with Opus
-		opus, err := opusEncoder.Encode(recvbuf, frameSize, maxBytes)
+		opus, err := opusEncoder.Encode(recv, frameSize, maxBytes)
 		if err != nil {
 			fmt.Println("Encoding Error:", err)
 			return
 		}
 
-		if v.Ready == false || v.Opus == nil {
-			fmt.Printf("Discordgo not ready for opus packets. %+v : %+v", v.Ready, v.Opus)
+		if v.Ready == false || v.OpusSend == nil {
+			fmt.Printf("Discordgo not ready for opus packets. %+v : %+v", v.Ready, v.OpusSend)
 			return
 		}
 		// send encoded opus data to the sendOpus channel
-		v.Opus <- opus
+		v.OpusSend <- opus
+	}
+}
+
+// ReceivePCM will receive on the the Discordgo OpusRecv channel and decode
+// the opus audio into PCM then send it on the provided channel.
+func ReceivePCM(v *discordgo.Voice, c chan *discordgo.Packet) {
+
+	// make sure this only runs one instance at a time.
+	mu.Lock()
+	if recvpcm || c == nil {
+		mu.Unlock()
+		return
+	}
+	recvpcm = true
+	mu.Unlock()
+
+	defer func() { sendpcm = false }()
+	var err error
+
+	for {
+
+		if v.Ready == false || v.OpusRecv == nil {
+			fmt.Printf("Discordgo not ready to receive opus packets. %+v : %+v", v.Ready, v.OpusSend)
+			return
+		}
+
+		p, ok := <-v.OpusRecv
+		if !ok {
+			return
+		}
+
+		if speakers == nil {
+			speakers = make(map[uint32]*gopus.Decoder)
+		}
+
+		_, ok = speakers[p.SSRC]
+		if !ok {
+			speakers[p.SSRC], err = gopus.NewDecoder(48000, 2)
+			if err != nil {
+				fmt.Println("error creating opus decoder:", err)
+				continue
+			}
+		}
+
+		p.PCM, err = speakers[p.SSRC].Decode(p.Opus, 960, false)
+		if err != nil {
+			fmt.Println("Error decoding opus data: ", err)
+			continue
+		}
+
+		c <- p
 	}
 }
 
@@ -123,7 +179,10 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 	defer s.Voice.Speaking(false)
 
 	// will actually only spawn one instance, a bit hacky.
-	go SendPCM(s.Voice, PCM)
+	if send == nil {
+		send = make(chan []int16, 2)
+	}
+	go SendPCM(s.Voice, send)
 
 	for {
 
@@ -138,7 +197,7 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 		}
 
 		// Send received PCM to the sendPCM channel
-		PCM <- audiobuf
+		send <- audiobuf
 	}
 }
 
