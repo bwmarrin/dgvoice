@@ -9,7 +9,7 @@
 // probably eventually move into a sub-folder of the Discordgo package.
 // **********************************************************************
 
-// package dgvoice provides opus encoding and audio file playback for the
+// Package dgvoice provides opus encoding and audio file playback for the
 // Discordgo package.
 package dgvoice
 
@@ -45,7 +45,6 @@ var (
 	recvpcm     bool
 	recv        chan *discordgo.Packet
 	send        chan []int16
-	receiving   bool
 	mu          sync.Mutex
 )
 
