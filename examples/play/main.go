@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"runtime"
 
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
@@ -39,7 +38,7 @@ func main() {
 
 	// Connect to voice channel.
 	// NOTE: Setting mute to false, deaf to true.
-	err = discord.ChannelVoiceJoin(*GuildID, *ChannelID, false, true)
+	dgv, err := discord.ChannelVoiceJoin(*GuildID, *ChannelID, false, true, 100)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -47,8 +46,10 @@ func main() {
 
 	// Hacky loop to prevent sending on a nil channel.
 	// TODO: Find a better way.
-	for discord.Voice.Ready == false {
-		runtime.Gosched()
+	err = dgv.WaitUntilConnected()
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
 
 	// Start loop and attempt to play all files in the given folder
@@ -57,11 +58,11 @@ func main() {
 	for _, f := range files {
 		fmt.Println("PlayAudioFile:", f.Name())
 		discord.UpdateStatus(0, f.Name())
-		dgvoice.PlayAudioFile(discord, fmt.Sprintf("%s/%s", *Folder, f.Name()))
+		dgvoice.PlayAudioFile(dgv, fmt.Sprintf("%s/%s", *Folder, f.Name()))
 	}
 
 	// Close connections
-	discord.Voice.Close()
+	dgv.Close()
 	discord.Close()
 
 	return

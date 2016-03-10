@@ -14,6 +14,7 @@
 package dgvoice
 
 import (
+	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -50,7 +51,7 @@ var (
 
 // SendPCM will receive on the provied channel encode
 // received PCM data into Opus then send that to Discordgo
-func SendPCM(v *discordgo.Voice, pcm <-chan []int16) {
+func SendPCM(v *discordgo.VoiceConnection, pcm <-chan []int16) {
 
 	// make sure this only runs one instance at a time.
 	mu.Lock()
@@ -99,7 +100,7 @@ func SendPCM(v *discordgo.Voice, pcm <-chan []int16) {
 
 // ReceivePCM will receive on the the Discordgo OpusRecv channel and decode
 // the opus audio into PCM then send it on the provided channel.
-func ReceivePCM(v *discordgo.Voice, c chan *discordgo.Packet) {
+func ReceivePCM(v *discordgo.VoiceConnection, c chan *discordgo.Packet) {
 
 	// make sure this only runs one instance at a time.
 	mu.Lock()
@@ -151,15 +152,17 @@ func ReceivePCM(v *discordgo.Voice, c chan *discordgo.Packet) {
 // PlayAudioFile will play the given filename to the already connected
 // Discord voice server/channel.  voice websocket and udp socket
 // must already be setup before this will work.
-func PlayAudioFile(s *discordgo.Session, filename string) {
+func PlayAudioFile(v *discordgo.VoiceConnection, filename string) {
 
 	// Create a shell command "object" to run.
 	run = exec.Command("ffmpeg", "-i", filename, "-f", "s16le", "-ar", strconv.Itoa(frameRate), "-ac", strconv.Itoa(channels), "pipe:1")
-	stdout, err := run.StdoutPipe()
+	ffmpegout, err := run.StdoutPipe()
 	if err != nil {
 		fmt.Println("StdoutPipe Error:", err)
 		return
 	}
+
+	ffmpegbuf := bufio.NewReaderSize(ffmpegout, 16384)
 
 	// Starts the ffmpeg command
 	err = run.Start()
@@ -168,25 +171,23 @@ func PlayAudioFile(s *discordgo.Session, filename string) {
 		return
 	}
 
-	// buffer used during loop below
-	audiobuf := make([]int16, frameSize*channels)
-
 	// Send "speaking" packet over the voice websocket
-	s.Voice.Speaking(true)
+	v.Speaking(true)
 
 	// Send not "speaking" packet over the websocket when we finish
-	defer s.Voice.Speaking(false)
+	defer v.Speaking(false)
 
 	// will actually only spawn one instance, a bit hacky.
 	if send == nil {
 		send = make(chan []int16, 2)
 	}
-	go SendPCM(s.Voice, send)
+	go SendPCM(v, send)
 
 	for {
 
 		// read data from ffmpeg stdout
-		err = binary.Read(stdout, binary.LittleEndian, &audiobuf)
+		audiobuf := make([]int16, frameSize*channels)
+		err = binary.Read(ffmpegbuf, binary.LittleEndian, &audiobuf)
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			return
 		}

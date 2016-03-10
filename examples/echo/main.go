@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"runtime"
 
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
@@ -37,7 +36,7 @@ func main() {
 
 	// Connect to voice channel.
 	// NOTE: Setting mute to false, deaf to true.
-	err = discord.ChannelVoiceJoin(*GuildID, *ChannelID, false, true)
+	dgv, err := discord.ChannelVoiceJoin(*GuildID, *ChannelID, false, true, 100)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -45,22 +44,24 @@ func main() {
 
 	// Hacky loop to prevent sending on a nil channel.
 	// TODO: Find a better way.
-	for discord.Voice.Ready == false {
-		runtime.Gosched()
+	err = dgv.WaitUntilConnected()
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
 
 	// Starts echo
-	Echo(discord.Voice)
+	Echo(dgv)
 
 	// Close connections
-	discord.Voice.Close()
+	dgv.Close()
 	discord.Close()
 
 	return
 }
 
 // Takes inbound audio and sends it right back out.
-func Echo(v *discordgo.Voice) {
+func Echo(v *discordgo.VoiceConnection) {
 
 	recv := make(chan *discordgo.Packet, 2)
 	go dgvoice.ReceivePCM(v, recv)
