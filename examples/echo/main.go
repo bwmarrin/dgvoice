@@ -36,15 +36,7 @@ func main() {
 
 	// Connect to voice channel.
 	// NOTE: Setting mute to false, deaf to true.
-	dgv, err := discord.ChannelVoiceJoin(*GuildID, *ChannelID, false, true, 100)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// Hacky loop to prevent sending on a nil channel.
-	// TODO: Find a better way.
-	err = dgv.WaitUntilConnected()
+	dgv, err := discord.ChannelVoiceJoin(*GuildID, *ChannelID, false, true)
 	if err != nil {
 		fmt.Println(err)
 		return
