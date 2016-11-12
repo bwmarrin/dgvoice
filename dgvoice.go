@@ -117,7 +117,7 @@ func ReceivePCM(v *discordgo.VoiceConnection, c chan *discordgo.Packet) {
 	for {
 
 		if v.Ready == false || v.OpusRecv == nil {
-			fmt.Printf("Discordgo not ready to receive opus packets. %+v : %+v", v.Ready, v.OpusSend)
+			fmt.Printf("Discordgo not ready to receive opus packets. %+v : %+v", v.Ready, v.OpusRecv)
 			return
 		}
 
