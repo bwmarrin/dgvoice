@@ -23,7 +23,7 @@ import (
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/layeh/gopus"
+	"layeh.com/gopus"
 )
 
 // NOTE: This API is not final and these are likely to change.
