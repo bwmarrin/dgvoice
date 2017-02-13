@@ -43,7 +43,7 @@ func main() {
 	}
 
 	// Starts echo
-	Echo(dgv)
+	echo(dgv)
 
 	// Close connections
 	dgv.Close()
@@ -53,7 +53,7 @@ func main() {
 }
 
 // Takes inbound audio and sends it right back out.
-func Echo(v *discordgo.VoiceConnection) {
+func echo(v *discordgo.VoiceConnection) {
 
 	recv := make(chan *discordgo.Packet, 2)
 	go dgvoice.ReceivePCM(v, recv)
