@@ -4,11 +4,6 @@
  *
  */
 
-// **********************************************************************
-// NOTE :: This is getting closer to a Opus<->PCM layer for Discordgo and will
-// probably eventually move into a sub-folder of the Discordgo package.
-// **********************************************************************
-
 // Package dgvoice provides opus encoding and audio file playback for the
 // Discordgo package.
 package dgvoice
