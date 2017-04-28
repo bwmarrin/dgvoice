@@ -10,7 +10,6 @@ import (
 )
 
 func main() {
-
 	// NOTE: All of the below fields are required for this example to work correctly.
 	var (
 		Email     = flag.String("e", "", "Discord account email.")
@@ -50,7 +49,8 @@ func main() {
 	for _, f := range files {
 		fmt.Println("PlayAudioFile:", f.Name())
 		discord.UpdateStatus(0, f.Name())
-		dgvoice.PlayAudioFile(dgv, fmt.Sprintf("%s/%s", *Folder, f.Name()))
+
+		dgvoice.PlayAudioFile(dgv, fmt.Sprintf("%s/%s", *Folder, f.Name()), make(chan bool))
 	}
 
 	// Close connections
