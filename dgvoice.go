@@ -37,9 +37,6 @@ const (
 var (
 	speakers    map[uint32]*gopus.Decoder
 	opusEncoder *gopus.Encoder
-	run         *exec.Cmd
-	sendpcm     bool
-	recvpcm     bool
 	mu          sync.Mutex
 )
 
@@ -58,17 +55,9 @@ var OnError = func(str string, err error) {
 // SendPCM will receive on the provied channel encode
 // received PCM data into Opus then send that to Discordgo
 func SendPCM(v *discordgo.VoiceConnection, pcm <-chan []int16) {
-
-	// make sure this only runs one instance at a time.
-	mu.Lock()
-	if sendpcm || pcm == nil {
-		mu.Unlock()
+	if pcm == nil {
 		return
 	}
-	sendpcm = true
-	mu.Unlock()
-
-	defer func() { sendpcm = false }()
 
 	var err error
 
@@ -108,21 +97,13 @@ func SendPCM(v *discordgo.VoiceConnection, pcm <-chan []int16) {
 // ReceivePCM will receive on the the Discordgo OpusRecv channel and decode
 // the opus audio into PCM then send it on the provided channel.
 func ReceivePCM(v *discordgo.VoiceConnection, c chan *discordgo.Packet) {
-
-	// make sure this only runs one instance at a time.
-	mu.Lock()
-	if recvpcm || c == nil {
-		mu.Unlock()
+	if c == nil {
 		return
 	}
-	recvpcm = true
-	mu.Unlock()
 
-	defer func() { sendpcm = false }()
 	var err error
 
 	for {
-
 		if v.Ready == false || v.OpusRecv == nil {
 			OnError(fmt.Sprintf("Discordgo not to receive opus packets. %+v : %+v", v.Ready, v.OpusSend), nil)
 			return
@@ -162,7 +143,7 @@ func ReceivePCM(v *discordgo.VoiceConnection, c chan *discordgo.Packet) {
 func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bool) {
 
 	// Create a shell command "object" to run.
-	run = exec.Command("ffmpeg", "-i", filename, "-f", "s16le", "-ar", strconv.Itoa(frameRate), "-ac", strconv.Itoa(channels), "pipe:1")
+	run := exec.Command("ffmpeg", "-i", filename, "-f", "s16le", "-ar", strconv.Itoa(frameRate), "-ac", strconv.Itoa(channels), "pipe:1")
 	ffmpegout, err := run.StdoutPipe()
 	if err != nil {
 		OnError("StdoutPipe Error", err)
@@ -199,7 +180,6 @@ func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bo
 	}()
 
 	for {
-
 		// read data from ffmpeg stdout
 		audiobuf := make([]int16, frameSize*channels)
 		err = binary.Read(ffmpegbuf, binary.LittleEndian, &audiobuf)
