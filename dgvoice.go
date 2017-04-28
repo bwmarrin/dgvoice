@@ -165,10 +165,18 @@ func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bo
 	}()
 
 	// Send "speaking" packet over the voice websocket
-	v.Speaking(true)
+	err = v.Speaking(true)
+	if err != nil {
+		OnError("Couldn't set speaking", err)
+	}
 
 	// Send not "speaking" packet over the websocket when we finish
-	defer v.Speaking(false)
+	defer func() {
+		err := v.Speaking(false)
+		if err != nil {
+			OnError("Couldn't stop speaking", err)
+		}
+	}()
 
 	send := make(chan []int16, 2)
 	defer close(send)
