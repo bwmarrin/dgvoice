@@ -207,3 +207,75 @@ func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bo
 		}
 	}
 }
+
+// PlayFromReader will play the audio inside reader to the already connected
+// Discord voice server/channel.  voice websocket and udp socket
+// must already be setup before this will work.
+func PlayFromReader(v *discordgo.VoiceConnection, reader io.Reader, stop <-chan bool) {
+
+	// Create a shell command "object" to run.
+	run := exec.Command("ffmpeg", "-i", "pipe:0", "-f", "s16le", "-ar", strconv.Itoa(frameRate), "-ac", strconv.Itoa(channels), "pipe:1")
+	run.Stdin = reader
+	ffmpegout, err := run.StdoutPipe()
+	if err != nil {
+		OnError("StdoutPipe Error", err)
+		return
+	}
+
+	ffmpegbuf := bufio.NewReaderSize(ffmpegout, 16384)
+
+	// Starts the ffmpeg command
+	err = run.Start()
+	if err != nil {
+		OnError("RunStart Error", err)
+		return
+	}
+
+	go func() {
+		<-stop
+		err = run.Process.Kill()
+	}()
+
+	// Send "speaking" packet over the voice websocket
+	err = v.Speaking(true)
+	if err != nil {
+		OnError("Couldn't set speaking", err)
+	}
+
+	// Send not "speaking" packet over the websocket when we finish
+	defer func() {
+		err := v.Speaking(false)
+		if err != nil {
+			OnError("Couldn't stop speaking", err)
+		}
+	}()
+
+	send := make(chan []int16, 2)
+	defer close(send)
+
+	close := make(chan bool)
+	go func() {
+		SendPCM(v, send)
+		close <- true
+	}()
+
+	for {
+		// read data from ffmpeg stdout
+		audiobuf := make([]int16, frameSize*channels)
+		err = binary.Read(ffmpegbuf, binary.LittleEndian, &audiobuf)
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return
+		}
+		if err != nil {
+			OnError("error reading from ffmpeg stdout", err)
+			return
+		}
+
+		// Send received PCM to the sendPCM channel
+		select {
+		case send <- audiobuf:
+		case <-close:
+			return
+		}
+	}
+}
