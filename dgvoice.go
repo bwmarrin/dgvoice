@@ -160,8 +160,12 @@ func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bo
 	}
 
 	go func() {
-		<-stop
-		err = run.Process.Kill()
+		for {
+			kill := <-stop
+			if kill {
+				err = run.Process.Kill()
+			}
+		}
 	}()
 
 	// Send "speaking" packet over the voice websocket
