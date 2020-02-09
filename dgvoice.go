@@ -140,7 +140,7 @@ func ReceivePCM(v *discordgo.VoiceConnection, c chan *discordgo.Packet) {
 // PlayAudioFile will play the given filename to the already connected
 // Discord voice server/channel.  voice websocket and udp socket
 // must already be setup before this will work.
-func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bool) {
+func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bool, pid chan int) {
 
 	// Create a shell command "object" to run.
 	run := exec.Command("ffmpeg", "-i", filename, "-f", "s16le", "-ar", strconv.Itoa(frameRate), "-ac", strconv.Itoa(channels), "pipe:1")
@@ -158,6 +158,9 @@ func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bo
 		OnError("RunStart Error", err)
 		return
 	}
+
+	// Return the PID for this very ffmpeg process
+	pid <- run.Process.Pid
 
 	go func() {
 		<-stop
