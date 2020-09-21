@@ -9,6 +9,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+var pause bool = false
+
 func main() {
 	// NOTE: All of the below fields are required for this example to work correctly.
 	var (
@@ -50,7 +52,7 @@ func main() {
 		fmt.Println("PlayAudioFile:", f.Name())
 		discord.UpdateStatus(0, f.Name())
 
-		dgvoice.PlayAudioFile(dgv, fmt.Sprintf("%s/%s", *Folder, f.Name()), make(chan bool))
+		dgvoice.PlayAudioFile(dgv, fmt.Sprintf("%s/%s", *Folder, f.Name()), make(chan bool), &pause)
 	}
 
 	// Close connections
