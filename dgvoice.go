@@ -159,6 +159,10 @@ func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bo
 		return
 	}
 
+	// prevent memory leak from residual ffmpeg streams
+	defer run.Process.Kill()
+
+	//when stop is sent, kill ffmpeg
 	go func() {
 		<-stop
 		err = run.Process.Kill()
