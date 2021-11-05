@@ -44,9 +44,9 @@ var OnError = func(str string, err error) {
 	prefix := "dgVoice: " + str
 
 	if err != nil {
-		os.Stderr.WriteString(prefix + ": " + err.Error())
+		os.Stderr.WriteString(prefix + ": " + err.Error() + "\n")
 	} else {
-		os.Stderr.WriteString(prefix)
+		os.Stderr.WriteString(prefix + "\n")
 	}
 }
 
@@ -74,7 +74,7 @@ func SendPCM(v *discordgo.VoiceConnection, pcm <-chan []int16) {
 		// read pcm from chan, exit if channel is closed.
 		recv, ok := <-pcm
 		if !ok {
-			OnError("PCM Channel closed", nil)
+			//OnError("PCM Channel closed", nil) //annoying log output
 			return
 		}
 
