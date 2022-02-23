@@ -162,10 +162,17 @@ func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bo
 	// prevent memory leak from residual ffmpeg streams
 	defer run.Process.Kill()
 
+	// Stop goroutine when audio is done playing
+	done := make(chan struct{})
+	defer close(done)
+
 	//when stop is sent, kill ffmpeg
 	go func() {
-		<-stop
-		err = run.Process.Kill()
+		select {
+		case <-stop:
+			err = run.Process.Kill()
+		case <-done:
+		}
 	}()
 
 	// Send "speaking" packet over the voice websocket
